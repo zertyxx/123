@@ -1,0 +1,1356 @@
+local Players = game:GetService("Players")
+local Teams = game:GetService("Teams")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Camera = workspace.CurrentCamera
+local HttpService = game:GetService("HttpService")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 10)
+
+-- === НАСТРОЙКИ И СОСТОЯНИЕ ===
+local menuOpenKey = Enum.KeyCode.LeftControl
+local aimbotToggleKey = Enum.KeyCode.E 
+local visualsToggleKey = nil 
+local flyToggleKey = nil 
+
+local isBindingAim = false
+local isBindingVis = false
+local isBindingMenu = false
+local isBindingFly = false 
+
+local aimbotEnabled = false
+local visualsEnabled = false
+local aimbotFOV = 400
+local aimbotMaxRange = 2000
+
+-- Переменные для Fly
+local flyEnabled = false
+local flySpeed = 50
+local flyingConnection = nil
+local bVelocity = nil
+local bGyro = nil
+
+-- Цвета Fatality
+local fatAccent = Color3.fromRGB(235, 20, 75)       
+local fatBgMain = Color3.fromRGB(15, 14, 22)        
+local fatBgPanel = Color3.fromRGB(21, 20, 34)       
+local fatTopBar = Color3.fromRGB(25, 24, 41)        
+local fatTextMuted = Color3.fromRGB(115, 115, 140)   
+
+local showTracers = false
+local showText = false
+local targetTeams = {} 
+local isMenuOpen = false
+local activeTracers = {}
+local animationTweening = false
+local currentTab = "MAIN" 
+local currentSubTab = "AIMBOT" 
+local selectedConfig = "default" 
+
+local uiElements = {}
+local tabFrames = {}
+local subTabFrames = {} 
+
+local selectedTpPlayer = nil
+
+-- === СОЗДАНИЕ SCREEN GUI ===
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "BrutalityFatalityv3"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = PlayerGui
+
+-- ==========================================
+-- ЗАГРУЗОЧНЫЙ ЭКРАН (LOADING SCREEN)
+-- ==========================================
+local LoadingFrame = Instance.new("Frame")
+LoadingFrame.Size = UDim2.new(0, 320, 0, 100)
+LoadingFrame.Position = UDim2.new(0.5, -160, 0.5, -50)
+LoadingFrame.BackgroundColor3 = fatBgMain
+LoadingFrame.BorderSizePixel = 0
+LoadingFrame.Parent = ScreenGui
+
+local LoadingStroke = Instance.new("UIStroke")
+LoadingStroke.Color = Color3.fromRGB(45, 43, 66)
+LoadingStroke.Thickness = 1
+LoadingStroke.Parent = LoadingFrame
+
+local LoadingTitle = Instance.new("TextLabel")
+LoadingTitle.Size = UDim2.new(1, 0, 0, 30)
+LoadingTitle.Position = UDim2.new(0, 0, 0, 15)
+LoadingTitle.BackgroundTransparency = 1
+LoadingTitle.Text = "B R U T A L I T Y  --  L O A D I N G"
+LoadingTitle.Font = Enum.Font.SourceSansBold
+LoadingTitle.TextSize = 14
+LoadingTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+LoadingTitle.Parent = LoadingFrame
+
+local PercentLabel = Instance.new("TextLabel")
+PercentLabel.Size = UDim2.new(1, 0, 0, 20)
+PercentLabel.Position = UDim2.new(0, 0, 0, 40)
+PercentLabel.BackgroundTransparency = 1
+PercentLabel.Text = "0%"
+PercentLabel.Font = Enum.Font.SourceSans
+PercentLabel.TextSize = 12
+PercentLabel.TextColor3 = fatTextMuted
+PercentLabel.Parent = LoadingFrame
+
+local ProgressBarBackground = Instance.new("Frame")
+ProgressBarBackground.Size = UDim2.new(0, 260, 0, 4)
+ProgressBarBackground.Position = UDim2.new(0.5, -130, 0, 70)
+ProgressBarBackground.BackgroundColor3 = Color3.fromRGB(25, 24, 41)
+ProgressBarBackground.BorderSizePixel = 0
+ProgressBarBackground.Parent = LoadingFrame
+
+local ProgressBarTrack = Instance.new("Frame")
+ProgressBarTrack.Size = UDim2.new(0, 0, 1, 0)
+ProgressBarTrack.BackgroundColor3 = fatAccent
+ProgressBarTrack.BorderSizePixel = 0
+ProgressBarTrack.Parent = ProgressBarBackground
+
+-- === ГЛАВНАЯ ПАНЕЛЬ МЕНЮ ===
+local MainPanel = Instance.new("Frame")
+MainPanel.Size = UDim2.new(0, 680, 0, 460) 
+MainPanel.Position = UDim2.new(0.5, -340, 0.5, -230)
+MainPanel.BackgroundColor3 = fatBgMain
+MainPanel.BorderSizePixel = 0
+MainPanel.Visible = false
+MainPanel.Parent = ScreenGui
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(45, 43, 66)
+MainStroke.Thickness = 1
+MainStroke.Parent = MainPanel
+
+-- Верхний Таб-Бар (Шапка)
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, 0, 0, 45)
+TopBar.BackgroundColor3 = fatTopBar
+TopBar.BorderSizePixel = 0
+TopBar.Parent = MainPanel
+
+local LogoLabel = Instance.new("TextLabel")
+LogoLabel.Size = UDim2.new(0, 130, 1, 0)
+LogoLabel.Position = UDim2.new(0, 16, 0, 0)
+LogoLabel.BackgroundTransparency = 1
+LogoLabel.Text = "B R U T A L I T Y"
+LogoLabel.Font = Enum.Font.SourceSansBold
+LogoLabel.TextSize = 18
+LogoLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+LogoLabel.TextXAlignment = Enum.TextXAlignment.Left
+LogoLabel.Parent = TopBar
+table.insert(uiElements, {instance = LogoLabel, isLabel = true})
+
+local TabsFrame = Instance.new("Frame")
+TabsFrame.Size = UDim2.new(0, 520, 1, 0)
+TabsFrame.Position = UDim2.new(0, 145, 0, 0)
+TabsFrame.BackgroundTransparency = 1
+TabsFrame.Parent = TopBar
+
+local function createTabContainer(id, isVisible)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 1, -45)
+    container.Position = UDim2.new(0, 0, 0, 45)
+    container.BackgroundTransparency = 1
+    container.Visible = isVisible
+    container.Parent = MainPanel
+    tabFrames[id] = container
+    return container
+end
+
+createTabContainer("MAIN", true)
+createTabContainer("VISUALS", false)
+createTabContainer("SETTINGS", false)
+
+local tabButtons = {}
+local function switchTab(tabName)
+    currentTab = tabName
+    for name, container in pairs(tabFrames) do
+        container.Visible = (name == tabName)
+    end
+    for name, button in pairs(tabButtons) do
+        button.TextColor3 = (name == tabName) and fatAccent or fatTextMuted
+    end
+end
+
+local function createRealTab(text, id, posX)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 95, 1, 0)
+    btn.Position = UDim2.new(0, posX, 0, 0)
+    btn.BackgroundTransparency = 1
+    btn.Text = text
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 12
+    btn.TextColor3 = (id == currentTab) and fatAccent or fatTextMuted
+    btn.Parent = TabsFrame
+    
+    btn.MouseButton1Click:Connect(function()
+        switchTab(id)
+    end)
+    
+    tabButtons[id] = btn
+    table.insert(uiElements, {instance = btn, isLabel = true})
+end
+
+createRealTab("⊗ MAIN", "MAIN", 0)
+createRealTab("👁 VISUALS", "VISUALS", 100)
+createRealTab("⚙ SETTINGS", "SETTINGS", 200)
+
+-- =========================================================
+-- ЛЕВОЕ ВЕРТИКАЛЬНОЕ МЕНЮ ВЫБОРА КАТЕГОРИЙ (ВНУТРИ MAIN)
+-- =========================================================
+local LeftMenuFrame = Instance.new("Frame")
+LeftMenuFrame.Size = UDim2.new(0, 120, 1, 0)
+LeftMenuFrame.Position = UDim2.new(0, 0, 0, 0)
+LeftMenuFrame.BackgroundTransparency = 1
+LeftMenuFrame.Parent = tabFrames["MAIN"]
+
+local LeftMenuLayout = Instance.new("UIListLayout")
+LeftMenuLayout.Padding = UDim.new(0, 4)
+LeftMenuLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+LeftMenuLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+LeftMenuLayout.Parent = LeftMenuFrame
+
+local MenuPadding = Instance.new("Frame")
+MenuPadding.Size = UDim2.new(1, 0, 0, 15)
+MenuPadding.BackgroundTransparency = 1
+MenuPadding.Parent = LeftMenuFrame
+
+local refreshPlayerSelectorList
+
+local subTabButtons = {}
+local function switchSubTab(subTabName)
+    currentSubTab = subTabName
+    for name, container in pairs(subTabFrames) do
+        container.Visible = (name == subTabName)
+    end
+    
+    for name, button in pairs(subTabButtons) do
+        if name == subTabName then
+            button.TextColor3 = fatAccent
+            button.BackgroundColor3 = Color3.fromRGB(24, 22, 34)
+        else
+            button.TextColor3 = fatTextMuted
+            button.BackgroundColor3 = Color3.fromRGB(18, 17, 26)
+        end
+    end
+    if subTabName == "TELEPORT" and refreshPlayerSelectorList then
+        refreshPlayerSelectorList()
+    end
+end
+
+local function createSubTabButton(text, id)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 105, 0, 32)
+    btn.BackgroundColor3 = Color3.fromRGB(18, 17, 26)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 12
+    btn.Text = text
+    btn.TextColor3 = fatTextMuted
+    btn.Parent = LeftMenuFrame
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(32, 30, 46)
+    stroke.Thickness = 1
+    stroke.Parent = btn
+    
+    btn.MouseButton1Click:Connect(function()
+        switchSubTab(id)
+    end)
+    
+    subTabButtons[id] = btn
+    table.insert(uiElements, {instance = btn, isText = true})
+    
+    local subContainer = Instance.new("Frame")
+    subContainer.Size = UDim2.new(1, -120, 1, 0)
+    subContainer.Position = UDim2.new(0, 120, 0, 0)
+    subContainer.BackgroundTransparency = 1
+    subContainer.Visible = false
+    subContainer.Parent = tabFrames["MAIN"]
+    subTabFrames[id] = subContainer
+end
+
+createSubTabButton("🎯 AIMBOT", "AIMBOT")
+createSubTabButton("🌀 TELEPORT", "TELEPORT")
+createSubTabButton("🏃 MOVEMENT", "MOVEMENT")
+
+switchSubTab("AIMBOT")
+
+
+-- =========================================================
+-- ФУНКЦИИ ШАБЛОНОВ ОКНО / ЭЛЕМЕНТ
+-- =========================================================
+local function createColumnWindow(title, posX, sizeX, parent)
+    local col = Instance.new("Frame")
+    col.Size = UDim2.new(0, sizeX, 1, -30)
+    col.Position = UDim2.new(0, posX, 0, 15)
+    col.BackgroundColor3 = fatBgPanel
+    col.BorderSizePixel = 0
+    col.Parent = parent
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(32, 31, 48)
+    stroke.Thickness = 1
+    stroke.Parent = col
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, 0, 0, 22)
+    lbl.Position = UDim2.new(0, 12, 0, 4)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = title:upper()
+    lbl.Font = Enum.Font.SourceSansBold
+    lbl.TextSize = 11
+    lbl.TextColor3 = Color3.fromRGB(210, 210, 220)
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = col
+    table.insert(uiElements, {instance = lbl, isLabel = true})
+
+    return col
+end
+
+local function createFatalityElement(parent, className, text, placeholder, posY, sizeX, sizeY)
+    local element = Instance.new(className)
+    element.Size = UDim2.new(0, sizeX, 0, sizeY)
+    element.Position = UDim2.new(0, 12, 0, posY)
+    element.BackgroundColor3 = fatBgMain
+    element.Font = Enum.Font.SourceSans
+    element.TextColor3 = Color3.fromRGB(220, 220, 230)
+    element.BackgroundTransparency = 0
+    element.Parent = parent
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(38, 37, 56)
+    stroke.Thickness = 1
+    stroke.Transparency = 0
+    stroke.Parent = element
+
+    if className == "TextButton" then
+        element.Text = text
+        element.TextSize = 13
+    elseif className == "TextBox" then
+        element.Text = text
+        element.PlaceholderText = placeholder
+        element.TextSize = 13
+        element.PlaceholderColor3 = fatTextMuted
+        element.ClearTextOnFocus = false
+    end
+
+    table.insert(uiElements, {instance = element, stroke = stroke, isText = true, isLabel = false})
+    return element
+end
+
+
+-- ==========================================
+-- НАПОЛНЕНИЕ ПОДКАТЕГОРИЙ (ВНУТРИ MAIN)
+-- ==========================================
+
+-- --- ПОДВКЛАДКА: AIMBOT ---
+local ColumnRageLeft = createColumnWindow("Aimbot Targets", 15, 260, subTabFrames["AIMBOT"])
+local ColumnRageRight = createColumnWindow("Fov & Target Settings", 290, 255, subTabFrames["AIMBOT"])
+
+local Aim_Button = createFatalityElement(ColumnRageLeft, "TextButton", "Aimbot Status: OFF", nil, 35, 150, 30)
+local Aim_Bind = createFatalityElement(ColumnRageLeft, "TextButton", "E", nil, 35, 65, 30)
+Aim_Bind.Position = UDim2.new(0, 172, 0, 35)
+
+local FOV_Input = createFatalityElement(ColumnRageRight, "TextBox", tostring(aimbotFOV), "FOV Size", 35, 230, 28)
+local Range_Input = createFatalityElement(ColumnRageRight, "TextBox", tostring(aimbotMaxRange), "Max Range", 85, 230, 28)
+
+
+-- --- ПОДВКЛАДКА: TELEPORT ---
+local ColumnTpLeft = createColumnWindow("Player Selector", 15, 260, subTabFrames["TELEPORT"])
+local ColumnTpRight = createColumnWindow("Teleport Actions", 290, 255, subTabFrames["TELEPORT"])
+
+local PlayerTpButton = createFatalityElement(ColumnTpRight, "TextButton", "Teleport to Player", nil, 35, 230, 35)
+
+local PlayerScroll = Instance.new("ScrollingFrame")
+PlayerScroll.Size = UDim2.new(1, -24, 1, -45)
+PlayerScroll.Position = UDim2.new(0, 12, 0, 35)
+PlayerScroll.BackgroundColor3 = fatBgMain
+PlayerScroll.BorderSizePixel = 0
+PlayerScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+PlayerScroll.ScrollBarThickness = 3
+PlayerScroll.Parent = ColumnTpLeft
+
+local PlayerScrollStroke = Instance.new("UIStroke")
+PlayerScrollStroke.Color = Color3.fromRGB(38, 37, 56)
+PlayerScrollStroke.Parent = PlayerScroll
+
+local PlayerListLayout = Instance.new("UIListLayout")
+PlayerListLayout.Padding = UDim.new(0, 4)
+PlayerListLayout.Parent = PlayerScroll
+
+function refreshPlayerSelectorList()
+    for _, child in ipairs(PlayerScroll:GetChildren()) do 
+        if child:IsA("TextButton") then child:Destroy() end 
+    end
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, -6, 0, 28)
+            btn.BackgroundColor3 = (selectedTpPlayer == p) and fatBgPanel or fatBgMain
+            btn.Font = Enum.Font.SourceSans
+            btn.TextSize = 13
+            btn.Text = "  👤  " .. p.Name
+            
+            local stroke = Instance.new("UIStroke")
+            stroke.Thickness = 1
+            stroke.Parent = btn
+
+            if selectedTpPlayer == p then
+                btn.TextColor3 = fatAccent
+                stroke.Color = fatAccent
+            else
+                btn.TextColor3 = Color3.fromRGB(180, 180, 190)
+                stroke.Color = Color3.fromRGB(45, 45, 55)
+            end
+
+            btn.MouseButton1Click:Connect(function()
+                selectedTpPlayer = p
+                refreshPlayerSelectorList() 
+            end)
+            btn.Parent = PlayerScroll
+        end
+    end
+    PlayerScroll.CanvasSize = UDim2.new(0, 0, 0, PlayerListLayout.AbsoluteContentSize.Y)
+end
+
+Players.PlayerAdded:Connect(function()
+    if currentSubTab == "TELEPORT" and MainPanel.Visible then refreshPlayerSelectorList() end
+end)
+Players.PlayerRemoving:Connect(function(player)
+    if selectedTpPlayer == player then selectedTpPlayer = nil end
+    if currentSubTab == "TELEPORT" and MainPanel.Visible then refreshPlayerSelectorList() end
+end)
+
+
+-- --- ПОДВКЛАДКА: MOVEMENT ---
+local ColumnMoveLeft = createColumnWindow("Movement Exploits", 15, 260, subTabFrames["MOVEMENT"])
+local ColumnMoveRight = createColumnWindow("Movement Settings", 290, 255, subTabFrames["MOVEMENT"])
+
+local Fly_Button = createFatalityElement(ColumnMoveLeft, "TextButton", "Fly Status: OFF", nil, 35, 150, 30)
+local Fly_Bind = createFatalityElement(ColumnMoveLeft, "TextButton", "[...]", nil, 35, 65, 30)
+Fly_Bind.Position = UDim2.new(0, 172, 0, 35)
+
+local FlySpeed_Input = createFatalityElement(ColumnMoveRight, "TextBox", tostring(flySpeed), "Fly Speed", 35, 230, 28)
+
+local function updateFlyPhysics()
+    if not flyEnabled then return end
+    
+    local character = LocalPlayer.Character
+    local rootPart = character and (character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso"))
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    
+    if not rootPart or not humanoid then return end
+    
+    if not bVelocity or bVelocity.Parent ~= rootPart then
+        if bVelocity then bVelocity:Destroy() end
+        bVelocity = Instance.new("BodyVelocity")
+        bVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+        bVelocity.Velocity = Vector3.new(0, 0, 0)
+        bVelocity.Parent = rootPart
+    end
+    
+    if not bGyro or bGyro.Parent ~= rootPart then
+        if bGyro then bGyro:Destroy() end
+        bGyro = Instance.new("BodyGyro")
+        bGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+        bGyro.CFrame = rootPart.CFrame
+        bGyro.P = 10000
+        bGyro.Parent = rootPart
+    end
+    
+    humanoid.PlatformStand = true
+    local moveDirection = Vector3.new(0, 0, 0)
+    
+    if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+        moveDirection = moveDirection + Camera.CFrame.LookVector
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+        moveDirection = moveDirection - Camera.CFrame.LookVector
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+        moveDirection = moveDirection - Camera.CFrame.RightVector
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+        moveDirection = moveDirection + Camera.CFrame.RightVector
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+        moveDirection = moveDirection + Vector3.new(0, 1, 0)
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+        moveDirection = moveDirection - Vector3.new(0, 1, 0)
+    end
+    
+    if moveDirection.Magnitude > 0 then
+        bVelocity.Velocity = moveDirection.Unit * flySpeed
+    else
+        bVelocity.Velocity = Vector3.new(0, 0, 0)
+    end
+    
+    bGyro.CFrame = Camera.CFrame
+end
+
+local function toggleFly(state)
+    if state == nil then flyEnabled = not flyEnabled else flyEnabled = state end
+    
+    if flyEnabled then
+        Fly_Button.Text = "Fly Status: ON"
+        Fly_Button.TextColor3 = Color3.fromRGB(50, 240, 50)
+        if flyingConnection then flyingConnection:Disconnect() end
+        flyingConnection = RunService.Heartbeat:Connect(updateFlyPhysics)
+    else
+        Fly_Button.Text = "Fly Status: OFF"
+        Fly_Button.TextColor3 = fatAccent
+        
+        if flyingConnection then flyingConnection:Disconnect() flyingConnection = nil end
+        if bVelocity then bVelocity:Destroy() bVelocity = nil end
+        if bGyro then bGyro:Destroy() bGyro = nil end
+        
+        local character = LocalPlayer.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.PlatformStand = false
+        end
+    end
+end
+
+Fly_Button.MouseButton1Click:Connect(function()
+    toggleFly()
+end)
+
+FlySpeed_Input.FocusLost:Connect(function()
+    local val = tonumber(FlySpeed_Input.Text)
+    if val then flySpeed = val else FlySpeed_Input.Text = tostring(flySpeed) end
+end)
+
+
+-- ==========================================
+-- НАПОЛНЕНИЕ ОСТАЛЬНЫХ ОСНОВНЫХ ВКЛАДОК
+-- ==========================================
+
+-- VISUALS 
+local ColumnVisLeft = createColumnWindow("Overlay Master", 135, 255, tabFrames["VISUALS"])
+local ColumnVisRight = createColumnWindow("Filter / Teams", 405, 260, tabFrames["VISUALS"])
+
+local Vis_Button = createFatalityElement(ColumnVisLeft, "TextButton", "Visuals Status: OFF", nil, 35, 155, 30)
+local Vis_Bind = createFatalityElement(ColumnVisLeft, "TextButton", "[...]", nil, 35, 65, 30)
+Vis_Bind.Position = UDim2.new(0, 177, 0, 35)
+
+local Tracer_Setting = createFatalityElement(ColumnVisLeft, "TextButton", "Tracers: OFF", nil, 85, 230, 28)
+local Text_Setting = createFatalityElement(ColumnVisLeft, "TextButton", "Show Info: OFF", nil, 125, 230, 28)
+local TeamsMenu_Button = createFatalityElement(ColumnVisRight, "TextButton", "👥 Toggle Target Teams Panel", nil, 35, 230, 32)
+
+local TeamPanel = Instance.new("Frame")
+TeamPanel.Size = UDim2.new(0, 200, 0, 180)
+TeamPanel.Position = UDim2.new(1, 12, 0, 0)
+TeamPanel.BackgroundColor3 = fatBgPanel
+TeamPanel.Visible = false
+TeamPanel.Parent = MainPanel
+
+local TeamStroke = Instance.new("UIStroke")
+TeamStroke.Color = Color3.fromRGB(45, 43, 66)
+TeamStroke.Parent = TeamPanel
+
+local TeamScroll = Instance.new("ScrollingFrame")
+TeamScroll.Size = UDim2.new(1, -16, 1, -16)
+TeamScroll.Position = UDim2.new(0, 8, 0, 8)
+TeamScroll.BackgroundTransparency = 1
+TeamScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+TeamScroll.ScrollBarThickness = 2
+TeamScroll.Parent = TeamPanel
+
+local TeamList = Instance.new("UIListLayout")
+TeamList.Padding = UDim.new(0, 4)
+TeamList.Parent = TeamScroll
+
+
+-- SETTINGS
+local ColumnConfig = createColumnWindow("Configuration Management", 25, 300, tabFrames["SETTINGS"])
+local ColumnColors = createColumnWindow("Fov Circle Customization", 350, 305, tabFrames["SETTINGS"])
+
+local ConfigName_Input = createFatalityElement(ColumnConfig, "TextBox", "default", "New Config Name", 35, 260, 28)
+local SaveConfig_Button = createFatalityElement(ColumnConfig, "TextButton", "💾 Save Config", nil, 75, 125, 30)
+local RefreshConfig_Button = createFatalityElement(ColumnConfig, "TextButton", "🔄 Refresh", nil, 75, 125, 30)
+RefreshConfig_Button.Position = UDim2.new(0, 147, 0, 75)
+
+local LabelMenuBind = Instance.new("TextLabel")
+LabelMenuBind.Size = UDim2.new(0, 120, 0, 30)
+LabelMenuBind.Position = UDim2.new(0, 12, 0, 115)
+LabelMenuBind.BackgroundTransparency = 1
+LabelMenuBind.Text = "Menu Toggle Key:"
+LabelMenuBind.Font = Enum.Font.SourceSansBold
+LabelMenuBind.TextSize = 13
+LabelMenuBind.TextColor3 = Color3.fromRGB(200, 200, 210)
+LabelMenuBind.TextXAlignment = Enum.TextXAlignment.Left
+LabelMenuBind.Parent = ColumnConfig
+table.insert(uiElements, {instance = LabelMenuBind, isLabel = true})
+
+local Menu_Bind = createFatalityElement(ColumnConfig, "TextButton", "LeftControl", nil, 115, 125, 30)
+Menu_Bind.Position = UDim2.new(0, 147, 0, 115)
+
+local ConfigScroll = Instance.new("ScrollingFrame")
+ConfigScroll.Size = UDim2.new(0, 260, 0, 175)
+ConfigScroll.Position = UDim2.new(0, 12, 0, 160)
+ConfigScroll.BackgroundColor3 = fatBgMain
+ConfigScroll.BorderSizePixel = 0
+ConfigScroll.ScrollBarThickness = 3
+ConfigScroll.Parent = ColumnConfig
+
+local ConfigScrollStroke = Instance.new("UIStroke")
+ConfigScrollStroke.Color = Color3.fromRGB(38, 37, 56)
+ConfigScrollStroke.Parent = ConfigScroll
+
+local ConfigListLayout = Instance.new("UIListLayout")
+ConfigListLayout.Padding = UDim.new(0, 4)
+ConfigListLayout.Parent = ConfigScroll
+
+local LoadScript_Button = createFatalityElement(ColumnConfig, "TextButton", "⚡ Load Script", nil, 345, 260, 35)
+LoadScript_Button.BackgroundColor3 = Color3.fromRGB(28, 26, 43)
+LoadScript_Button.Font = Enum.Font.SourceSansBold
+LoadScript_Button.TextSize = 14
+LoadScript_Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+-- ==========================================
+-- ЦВЕТОКРЫЛО (COLORPICKER)
+-- ==========================================
+local SatValBox = Instance.new("Frame")
+SatValBox.Size = UDim2.new(0, 210, 0, 210)
+SatValBox.Position = UDim2.new(0, 15, 0, 40)
+SatValBox.BackgroundColor3 = Color3.fromHSV(0, 1, 1) 
+SatValBox.BorderSizePixel = 0
+SatValBox.Parent = ColumnColors
+
+local SatValBoxStroke = Instance.new("UIStroke")
+SatValBoxStroke.Color = Color3.fromRGB(45, 43, 66)
+SatValBoxStroke.Thickness = 1
+SatValBoxStroke.Parent = SatValBox
+
+local WhiteGradientFrame = Instance.new("Frame")
+WhiteGradientFrame.Size = UDim2.new(1, 0, 1, 0)
+WhiteGradientFrame.BackgroundTransparency = 0
+WhiteGradientFrame.BorderSizePixel = 0
+WhiteGradientFrame.Parent = SatValBox
+
+local UIGradientWhite = Instance.new("UIGradient")
+UIGradientWhite.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+UIGradientWhite.Transparency = NumberSequence.new({
+    NumberSequenceKeypoint.new(0, 0),
+    NumberSequenceKeypoint.new(1, 1)
+})
+UIGradientWhite.Parent = WhiteGradientFrame
+
+local BlackGradientFrame = Instance.new("Frame")
+BlackGradientFrame.Size = UDim2.new(1, 0, 1, 0)
+BlackGradientFrame.BackgroundTransparency = 0
+BlackGradientFrame.BorderSizePixel = 0
+BlackGradientFrame.Parent = SatValBox
+
+local UIGradientBlack = Instance.new("UIGradient")
+UIGradientBlack.Color = ColorSequence.new(Color3.fromRGB(0, 0, 0))
+UIGradientBlack.Rotation = 90
+UIGradientBlack.Transparency = NumberSequence.new({
+    NumberSequenceKeypoint.new(0, 1),
+    NumberSequenceKeypoint.new(1, 0)
+})
+UIGradientBlack.Parent = BlackGradientFrame
+
+local SatValTrigger = Instance.new("TextButton")
+SatValTrigger.Size = UDim2.new(1, 0, 1, 0)
+SatValTrigger.BackgroundTransparency = 1
+SatValTrigger.Text = ""
+SatValTrigger.Parent = SatValBox
+
+local HueSlider = Instance.new("ImageButton")
+HueSlider.Size = UDim2.new(0, 26, 0, 210)
+HueSlider.Position = UDim2.new(0, 240, 0, 40)
+HueSlider.Image = "rbxassetid://3641079629" 
+HueSlider.ScaleType = Enum.ScaleType.Stretch
+HueSlider.BorderSizePixel = 0
+HueSlider.Parent = ColumnColors
+
+local HueSliderStroke = Instance.new("UIStroke")
+HueSliderStroke.Color = Color3.fromRGB(45, 43, 66)
+HueSliderStroke.Thickness = 1
+HueSliderStroke.Parent = HueSlider
+
+local SatValCursor = Instance.new("Frame")
+SatValCursor.Size = UDim2.new(0, 8, 0, 8)
+SatValCursor.Position = UDim2.new(1, -4, 0, -4)
+SatValCursor.BackgroundTransparency = 1
+SatValCursor.Parent = SatValBox
+
+local CursorCorner = Instance.new("UICorner")
+CursorCorner.CornerRadius = UDim.new(1, 0)
+CursorCorner.Parent = SatValCursor
+
+local CursorStroke = Instance.new("UIStroke")
+CursorStroke.Color = Color3.fromRGB(255, 255, 255)
+CursorStroke.Thickness = 1.5
+CursorStroke.Parent = SatValCursor
+
+local fovCircle = Drawing.new("Circle")
+fovCircle.Visible = false
+fovCircle.Thickness = 1
+fovCircle.Filled = false
+fovCircle.NumSides = 64
+fovCircle.Transparency = 0.5
+
+local currentH, currentS, currentV = 0.0, 1.0, 1.0
+local currentWhColor = Color3.fromHSV(currentH, currentS, currentV)
+
+local function updateColor()
+    if SatValBox and SatValCursor then
+        SatValBox.BackgroundColor3 = Color3.fromHSV(currentH, 1, 1)
+        currentWhColor = Color3.fromHSV(currentH, currentS, currentV)
+        if fovCircle then fovCircle.Color = currentWhColor end
+        SatValCursor.Position = UDim2.new(currentS, -4, 1 - currentV, -4)
+    end
+end
+
+local function isPlayerTargeted(player)
+    if player == LocalPlayer then return false end
+    local hasSelection = false
+    for _, _ in pairs(targetTeams) do hasSelection = true break end
+    if not hasSelection then
+        if player.Team and LocalPlayer.Team and player.Team == LocalPlayer.Team then return false end
+        return true
+    else
+        if player.Team and targetTeams[player.Team] then return true end
+    end
+    return false
+end
+
+local function getConfigFile(name)
+    return "brutality_" .. tostring(name) .. ".json"
+end
+
+local function applyConfigValues()
+    local fileName = getConfigFile(selectedConfig)
+    if readfile and isfile and isfile(fileName) then
+        local data = readfile(fileName)
+        local s, decoded = pcall(function() return HttpService:JSONDecode(data) end)
+        if s then
+            aimbotEnabled = decoded.aimbotEnabled or false
+            visualsEnabled = decoded.visualsEnabled or false
+            showTracers = decoded.showTracers or false
+            showText = decoded.showText or false
+            aimbotFOV = decoded.aimbotFOV or 400
+            aimbotMaxRange = decoded.aimbotMaxRange or 2000
+            currentH = decoded.colorH or currentH
+            currentS = decoded.colorS or currentS
+            currentV = decoded.colorV or currentV
+            
+            flyEnabled = decoded.flyEnabled or false
+            flySpeed = decoded.flySpeed or 50
+            
+            if decoded.menuOpenKey then menuOpenKey = Enum.KeyCode[decoded.menuOpenKey] end
+            if decoded.aimbotToggleKey then aimbotToggleKey = Enum.KeyCode[decoded.aimbotToggleKey] else aimbotToggleKey = nil end
+            if decoded.visualsToggleKey then visualsToggleKey = Enum.KeyCode[decoded.visualsToggleKey] else visualsToggleKey = nil end
+            if decoded.flyToggleKey then flyToggleKey = Enum.KeyCode[decoded.flyToggleKey] else flyToggleKey = nil end
+            
+            Aim_Button.Text = aimbotEnabled and "Aimbot Status: ON" or "Aimbot Status: OFF"
+            Aim_Button.TextColor3 = aimbotEnabled and Color3.fromRGB(50, 240, 50) or fatAccent
+            Vis_Button.Text = visualsEnabled and "Visuals Status: ON" or "Visuals Status: OFF"
+            Vis_Button.TextColor3 = visualsEnabled and Color3.fromRGB(50, 240, 50) or fatAccent
+            
+            toggleFly(flyEnabled)
+            FlySpeed_Input.Text = tostring(flySpeed)
+            
+            FOV_Input.Text = tostring(aimbotFOV)
+            Range_Input.Text = tostring(aimbotMaxRange)
+            Tracer_Setting.Text = "Tracers: " .. (showTracers and "ON" or "OFF")
+            Text_Setting.Text = "Show Info: " .. (showText and "ON" or "OFF")
+            
+            Menu_Bind.Text = menuOpenKey.Name
+            Aim_Bind.Text = aimbotToggleKey and aimbotToggleKey.Name or "[...]"
+            Vis_Bind.Text = visualsToggleKey and visualsToggleKey.Name or "[...]"
+            Fly_Bind.Text = flyToggleKey and flyToggleKey.Name or "[...]"
+            
+            updateColor()
+        end
+    end
+end
+
+local function updateConfigList()
+    for _, child in ipairs(ConfigScroll:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+    
+    local files = {}
+    if listfiles then
+        local success, result = pcall(listfiles, "")
+        if success then
+            for _, path in ipairs(result) do
+                local file = path:match("brutality_(.+)%.json$")
+                if file then table.insert(files, file) end
+            end
+        end
+    end
+    if #files == 0 then files = {"default"} end
+    
+    for _, cfgName in ipairs(files) do
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -6, 0, 30)
+        btn.BackgroundColor3 = (selectedConfig == cfgName) and fatBgPanel or fatBgMain
+        btn.Font = Enum.Font.SourceSansBold
+        btn.TextSize = 13
+        btn.Text = "  📄  " .. cfgName
+        btn.TextColor3 = (selectedConfig == cfgName) and fatAccent or Color3.fromRGB(180, 180, 190)
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        
+        local strk = Instance.new("UIStroke")
+        strk.Color = (selectedConfig == cfgName) and fatAccent or Color3.fromRGB(45, 45, 55)
+        strk.Parent = btn
+        
+        btn.MouseButton1Click:Connect(function()
+            selectedConfig = cfgName
+            updateConfigList()
+        end)
+        btn.Parent = ConfigScroll
+    end
+    ConfigScroll.CanvasSize = UDim2.new(0, 0, 0, ConfigListLayout.AbsoluteContentSize.Y)
+end
+
+-- ЛОГИКА ТЕЛЕПОРТА
+PlayerTpButton.MouseButton1Click:Connect(function()
+    if selectedTpPlayer and selectedTpPlayer.Parent then
+        local p = selectedTpPlayer
+        if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.HumanoidRootPart.CFrame = p.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
+                PlayerTpButton.Text = "Teleported!"
+                task.delay(1.5, function() PlayerTpButton.Text = "Teleport to Player" end)
+                return
+            end
+        end
+        PlayerTpButton.Text = "Target has no RootPart"
+        task.delay(1.5, function() PlayerTpButton.Text = "Teleport to Player" end)
+    else
+        PlayerTpButton.Text = "Please select player first"
+        task.delay(1.5, function() PlayerTpButton.Text = "Teleport to Player" end)
+    end
+end)
+
+-- ОБРАБОТЧИКИ КНОПОК
+LoadScript_Button.MouseButton1Click:Connect(function()
+    applyConfigValues()
+    LoadScript_Button.Text = "⚡ Loaded successfully!"
+    task.delay(1.2, function() LoadScript_Button.Text = "⚡ Load Script" end)
+end)
+
+SaveConfig_Button.MouseButton1Click:Connect(function()
+    local name = ConfigName_Input.Text ~= "" and ConfigName_Input.Text or "default"
+    local configData = {
+        aimbotEnabled = aimbotEnabled,
+        visualsEnabled = visualsEnabled,
+        aimbotFOV = tonumber(FOV_Input.Text) or aimbotFOV,
+        aimbotMaxRange = tonumber(Range_Input.Text) or aimbotMaxRange,
+        showTracers = showTracers,
+        showText = showText,
+        colorH = currentH,
+        colorS = currentS,
+        colorV = currentV,
+        flyEnabled = flyEnabled,
+        flySpeed = flySpeed,
+        menuOpenKey = menuOpenKey and menuOpenKey.Name or "LeftControl",
+        aimbotToggleKey = aimbotToggleKey and aimbotToggleKey.Name or nil,
+        visualsToggleKey = visualsToggleKey and visualsToggleKey.Name or nil,
+        flyToggleKey = flyToggleKey and flyToggleKey.Name or nil
+    }
+    
+    local success, encoded = pcall(function() return HttpService:JSONEncode(configData) end)
+    if success and writefile then
+        writefile(getConfigFile(name), encoded)
+        selectedConfig = name
+        updateConfigList()
+        SaveConfig_Button.Text = "SAVED!"
+        task.delay(1.2, function() SaveConfig_Button.Text = "💾 Save Config" end)
+    else
+        SaveConfig_Button.Text = "NOT SUPPORTED"
+        task.delay(1.2, function() SaveConfig_Button.Text = "💾 Save Config" end)
+    end
+end)
+
+RefreshConfig_Button.MouseButton1Click:Connect(updateConfigList)
+
+Aim_Bind.MouseButton1Click:Connect(function()
+    isBindingVis, isBindingMenu, isBindingFly = false, false, false
+    Vis_Bind.Text = visualsToggleKey and visualsToggleKey.Name or "[...]"
+    Menu_Bind.Text = menuOpenKey and menuOpenKey.Name or "[...]"
+    Fly_Bind.Text = flyToggleKey and flyToggleKey.Name or "[...]"
+    isBindingAim = true
+    Aim_Bind.Text = "WAIT..."
+    Aim_Bind.TextColor3 = fatAccent
+end)
+
+Vis_Bind.MouseButton1Click:Connect(function()
+    isBindingAim, isBindingMenu, isBindingFly = false, false, false
+    Aim_Bind.Text = aimbotToggleKey and aimbotToggleKey.Name or "[...]"
+    Menu_Bind.Text = menuOpenKey and menuOpenKey.Name or "[...]"
+    Fly_Bind.Text = flyToggleKey and flyToggleKey.Name or "[...]"
+    isBindingVis = true
+    Vis_Bind.Text = "WAIT..."
+    Vis_Bind.TextColor3 = fatAccent
+end)
+
+Menu_Bind.MouseButton1Click:Connect(function()
+    isBindingAim, isBindingVis, isBindingFly = false, false, false
+    Aim_Bind.Text = aimbotToggleKey and aimbotToggleKey.Name or "[...]"
+    Vis_Bind.Text = visualsToggleKey and visualsToggleKey.Name or "[...]"
+    Fly_Bind.Text = flyToggleKey and flyToggleKey.Name or "[...]"
+    isBindingMenu = true
+    Menu_Bind.Text = "WAIT..."
+    Menu_Bind.TextColor3 = fatAccent
+end)
+
+Fly_Bind.MouseButton1Click:Connect(function()
+    isBindingAim, isBindingVis, isBindingMenu = false, false, false
+    Aim_Bind.Text = aimbotToggleKey and aimbotToggleKey.Name or "[...]"
+    Vis_Bind.Text = visualsToggleKey and visualsToggleKey.Name or "[...]"
+    Menu_Bind.Text = menuOpenKey and menuOpenKey.Name or "[...]"
+    isBindingFly = true
+    Fly_Bind.Text = "WAIT..."
+    Fly_Bind.TextColor3 = fatAccent
+end)
+
+local function setUIFade(transparency)
+    for _, item in ipairs(uiElements) do
+        if item.isLabel then
+            item.instance.TextTransparency = transparency
+        elseif item.isText then
+            item.instance.BackgroundTransparency = transparency
+            if item.instance:IsA("TextButton") or item.instance:IsA("TextBox") then
+                item.instance.TextTransparency = transparency
+            end
+            if item.stroke then item.stroke.Transparency = transparency end
+        end
+    end
+end
+
+local function toggleMenuAnimation()
+    if animationTweening then return end
+    animationTweening = true
+    
+    if not isMenuOpen then
+        MainPanel.Size = UDim2.new(0, 680, 0, 0)
+        MainPanel.BackgroundTransparency = 1
+        MainStroke.Transparency = 1
+        TopBar.BackgroundTransparency = 1
+        setUIFade(1)
+        MainPanel.Visible = true
+        
+        TweenService:Create(MainPanel, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, 680, 0, 460), BackgroundTransparency = 0}):Play()
+        TweenService:Create(MainStroke, TweenInfo.new(0.4), {Transparency = 0}):Play()
+        TweenService:Create(TopBar, TweenInfo.new(0.4), {BackgroundTransparency = 0}):Play()
+        
+        task.wait(0.1)
+        setUIFade(0)
+        isMenuOpen = true
+        animationTweening = false
+        if currentSubTab == "TELEPORT" then refreshPlayerSelectorList() end
+    else
+        TeamPanel.Visible = false
+        isBindingAim, isBindingVis, isBindingMenu, isBindingFly = false, false, false, false
+        Aim_Bind.Text = aimbotToggleKey and aimbotToggleKey.Name or "[...]"
+        Vis_Bind.Text = visualsToggleKey and visualsToggleKey.Name or "[...]"
+        Menu_Bind.Text = menuOpenKey and menuOpenKey.Name or "[...]"
+        Fly_Bind.Text = flyToggleKey and flyToggleKey.Name or "[...]"
+        
+        setUIFade(1)
+        TweenService:Create(MainPanel, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Size = UDim2.new(0, 680, 0, 0), BackgroundTransparency = 1}):Play()
+        TweenService:Create(TopBar, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+        local p = TweenService:Create(MainStroke, TweenInfo.new(0.3), {Transparency = 1})
+        p:Play()
+        p.Completed:Connect(function()
+            MainPanel.Visible = false
+            isMenuOpen = false
+            animationTweening = false
+        end)
+    end
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    local typing = UserInputService:GetFocusedTextBox()
+    
+    if isBindingAim and input.UserInputType == Enum.UserInputType.Keyboard then
+        aimbotToggleKey = input.KeyCode
+        isBindingAim = false
+        Aim_Bind.Text = aimbotToggleKey.Name
+        Aim_Bind.TextColor3 = Color3.fromRGB(220, 220, 230)
+        return
+    elseif isBindingVis and input.UserInputType == Enum.UserInputType.Keyboard then
+        visualsToggleKey = input.KeyCode
+        isBindingVis = false
+        Vis_Bind.Text = visualsToggleKey.Name
+        Vis_Bind.TextColor3 = Color3.fromRGB(220, 220, 230)
+        return
+    elseif isBindingMenu and input.UserInputType == Enum.UserInputType.Keyboard then
+        menuOpenKey = input.KeyCode
+        isBindingMenu = false
+        Menu_Bind.Text = menuOpenKey.Name
+        Menu_Bind.TextColor3 = Color3.fromRGB(220, 220, 230)
+        return
+    elseif isBindingFly and input.UserInputType == Enum.UserInputType.Keyboard then
+        flyToggleKey = input.KeyCode
+        isBindingFly = false
+        Fly_Bind.Text = flyToggleKey.Name
+        Fly_Bind.TextColor3 = Color3.fromRGB(220, 220, 230)
+        return
+    end
+    
+    if typing then return end
+    if gameProcessed and input.KeyCode ~= menuOpenKey then return end
+    
+    if input.KeyCode == menuOpenKey then
+        toggleMenuAnimation()
+    end
+    
+    if aimbotToggleKey and input.KeyCode == aimbotToggleKey then
+        aimbotEnabled = not aimbotEnabled
+        Aim_Button.Text = aimbotEnabled and "Aimbot Status: ON" or "Aimbot Status: OFF"
+        Aim_Button.TextColor3 = aimbotEnabled and Color3.fromRGB(50, 240, 50) or fatAccent
+        print("Aimbot status: " .. (aimbotEnabled and "ENABLED" or "DISABLED"))
+    end
+    
+    if visualsToggleKey and input.KeyCode == visualsToggleKey then
+        visualsEnabled = not visualsEnabled
+        Vis_Button.Text = visualsEnabled and "Visuals Status: ON" or "Visuals Status: OFF"
+        Vis_Button.TextColor3 = visualsEnabled and Color3.fromRGB(50, 240, 50) or fatAccent
+        updateVisuals()
+    end
+    
+    if flyToggleKey and input.KeyCode == flyToggleKey then
+        toggleFly()
+    end
+end)
+
+local hueDragging = false
+HueSlider.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        hueDragging = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        hueDragging = false
+    end
+end)
+
+local satValDragging = false
+SatValTrigger.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        satValDragging = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        satValDragging = false
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    local mousePos = UserInputService:GetMouseLocation()
+    if hueDragging then
+        local relativeY = mousePos.Y - HueSlider.AbsolutePosition.Y - 36
+        currentH = math.clamp(relativeY / HueSlider.AbsoluteSize.Y, 0, 1)
+        updateColor()
+    end
+    if satValDragging then
+        local relativeX = mousePos.X - SatValBox.AbsolutePosition.X
+        local relativeY = mousePos.Y - SatValBox.AbsolutePosition.Y - 36
+        currentS = math.clamp(relativeX / SatValBox.AbsoluteSize.X, 0, 1)
+        currentV = 1 - math.clamp(relativeY / SatValBox.AbsoluteSize.Y, 0, 1)
+        updateColor()
+    end
+end)
+
+local function refreshTeamList()
+    for _, child in ipairs(TeamScroll:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+    local allTeams = Teams:GetTeams()
+    if #allTeams == 0 then return end
+    
+    for _, team in ipairs(allTeams) do
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -4, 0, 28)
+        btn.BackgroundColor3 = fatBgMain
+        btn.Font = Enum.Font.SourceSans
+        btn.TextSize = 13
+        btn.Text = (team == LocalPlayer.Team) and team.Name .. " (YOU)" or team.Name
+        
+        local stroke = Instance.new("UIStroke")
+        stroke.Thickness = 1
+        stroke.Parent = btn
+        
+        if targetTeams[team] then
+            btn.TextColor3 = fatAccent
+            stroke.Color = fatAccent
+        else
+            btn.TextColor3 = Color3.fromRGB(180, 180, 190)
+            stroke.Color = Color3.fromRGB(45, 45, 55)
+        end
+        
+        btn.MouseButton1Click:Connect(function()
+            if targetTeams[team] then
+                targetTeams[team] = nil
+                btn.TextColor3 = Color3.fromRGB(180, 180, 190)
+                stroke.Color = Color3.fromRGB(45, 45, 55)
+            else
+                targetTeams[team] = true
+                btn.TextColor3 = fatAccent
+                stroke.Color = fatAccent
+            end
+        end)
+        btn.Parent = TeamScroll
+    end
+    TeamScroll.CanvasSize = UDim2.new(0, 0, 0, TeamList.AbsoluteContentSize.Y)
+end
+
+local function createTextAbovePlayer(player, char, distance)
+    local oldGui = char:FindFirstChild("TacticalTextGui")
+    if oldGui then
+        if showText and visualsEnabled and isPlayerTargeted(player) then
+            local label = oldGui:FindFirstChildOfClass("TextLabel")
+            if label then 
+                label.Text = player.Name .. " [" .. math.floor(distance) .. "m]"
+            end
+            oldGui.Enabled = true
+        else
+            oldGui.Enabled = false
+        end
+        return
+    end
+
+    local BillboardGui = Instance.new("BillboardGui")
+    BillboardGui.Name = "TacticalTextGui"
+    BillboardGui.AlwaysOnTop = true
+    BillboardGui.Size = UDim2.new(0, 200, 0, 50)
+    BillboardGui.StudsOffset = Vector3.new(0, 3.5, 0)
+    BillboardGui.Enabled = (showText and visualsEnabled and isPlayerTargeted(player))
+
+    local TextLabel = Instance.new("TextLabel")
+    TextLabel.Size = UDim2.new(1, 0, 1, 0)
+    TextLabel.BackgroundTransparency = 1
+    TextLabel.Text = player.Name .. " [" .. math.floor(distance) .. "m]"
+    TextLabel.Font = Enum.Font.SourceSansBold
+    TextLabel.TextSize = 13
+    TextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TextLabel.TextStrokeTransparency = 0.2
+    TextLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    TextLabel.Parent = BillboardGui
+
+    BillboardGui.Parent = char
+end
+
+-- ИНТЕГРИРОВАННАЯ ФУНКЦИЯ ПОИСКА ЦЕЛИ ИЗ ВАШЕГО ПРИМЕРА
+local function getClosestPlayerToMouse()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+    
+    local currentFOV = tonumber(FOV_Input.Text) or aimbotFOV
+    local currentRange = tonumber(Range_Input.Text) or aimbotMaxRange
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        -- ПЕРЕВІРКА НА КОМАНДУ ТА ЦІЛЬ
+        if isPlayerTargeted(player) and player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+            local head = player.Character.Head
+            local screenPoint, onScreen = Camera:WorldToViewportPoint(head.Position)
+
+            if onScreen then
+                local viewportSize = Camera.ViewportSize
+                local center = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+                local distanceFromCenter = (Vector2.new(screenPoint.X, screenPoint.Y) - center).magnitude
+
+                -- Перевірка FOV відносно центру екрана
+                if distanceFromCenter <= currentFOV then
+                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        local worldDist = (head.Position - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
+                        if worldDist < shortestDistance and worldDist <= currentRange then
+                            shortestDistance = worldDist
+                            closestPlayer = player
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closestPlayer
+end
+
+local function clearTracers()
+    for player, tracer in pairs(activeTracers) do
+        tracer.Visible = false
+        tracer:Remove()
+        activeTracers[player] = nil
+    end
+end
+
+local function updateTracers()
+    if not visualsEnabled or not showTracers then
+        clearTracers()
+        return
+    end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if isPlayerTargeted(player) and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local character = player.Character
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            
+            if humanoid and humanoid.Health > 0 then
+                local rootPart = character.HumanoidRootPart
+                local screenPos, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
+
+                if onScreen then
+                    local tracer = activeTracers[player]
+                    if not tracer then
+                        tracer = Drawing.new("Line")
+                        tracer.Thickness = 1
+                        tracer.Transparency = 0.6
+                        activeTracers[player] = tracer
+                    end
+
+                    tracer.Color = currentWhColor
+                    tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                    tracer.To = Vector2.new(screenPos.X, screenPos.Y)
+                    tracer.Visible = true
+                else
+                    if activeTracers[player] then activeTracers[player].Visible = false end
+                end
+            else
+                if activeTracers[player] then activeTracers[player].Visible = false end
+            end
+        else
+            if activeTracers[player] then activeTracers[player].Visible = false end
+        end
+    end
+
+    for player, tracer in pairs(activeTracers) do
+        if not Players:FindFirstChild(player.Name) then
+            tracer.Visible = false
+            tracer:Remove()
+            activeTracers[player] = nil
+        end
+    end
+end
+
+local function updateVisuals()
+    if not visualsEnabled then
+        clearTracers()
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Character then
+                local gui = p.Character:FindFirstChild("TacticalTextGui")
+                if gui then gui.Enabled = false end
+            end
+        end
+        return
+    end
+
+    local currentRange = tonumber(Range_Input.Text) or aimbotMaxRange
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local char = player.Character
+            local root = char.HumanoidRootPart
+            local distance = (Camera.CFrame.Position - root.Position).Magnitude
+
+            if distance <= currentRange then
+                createTextAbovePlayer(player, char, distance)
+            else
+                local gui = char:FindFirstChild("TacticalTextGui")
+                if gui then gui.Enabled = false end
+            end
+        end
+    end
+end
+
+TeamsMenu_Button.MouseButton1Click:Connect(function()
+    TeamPanel.Visible = not TeamPanel.Visible
+    if TeamPanel.Visible then refreshTeamList() end
+end)
+
+Tracer_Setting.MouseButton1Click:Connect(function()
+    showTracers = not showTracers
+    Tracer_Setting.Text = "Tracers: " .. (showTracers and "ON" or "OFF")
+    if not showTracers then clearTracers() end
+end)
+
+Text_Setting.MouseButton1Click:Connect(function()
+    showText = not showText
+    Text_Setting.Text = "Show Info: " .. (showText and "ON" or "OFF")
+    updateVisuals()
+end)
+
+Aim_Button.MouseButton1Click:Connect(function()
+    aimbotEnabled = not aimbotEnabled
+    Aim_Button.Text = aimbotEnabled and "Aimbot Status: ON" or "Aimbot Status: OFF"
+    Aim_Button.TextColor3 = aimbotEnabled and Color3.fromRGB(50, 240, 50) or fatAccent
+end)
+
+local function setupNumericInput(box, fallback)
+    box.FocusLost:Connect(function()
+        local num = tonumber(box.Text)
+        if num then fallback = num else box.Text = tostring(fallback) end
+    end)
+end
+setupNumericInput(FOV_Input, aimbotFOV)
+setupNumericInput(Range_Input, aimbotMaxRange)
+
+RunService.RenderStepped:Connect(function()
+    if aimbotEnabled then
+        local currentFOV = tonumber(FOV_Input.Text) or aimbotFOV
+        local viewportSize = Camera.ViewportSize
+        
+        -- Рендер FOV точно по центру екрана
+        fovCircle.Position = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+        fovCircle.Radius = currentFOV
+        fovCircle.Color = currentWhColor -- ТЕПЕРЬ СИНХРОНИЗИРОВАНО С ЦВЕТОМ ИНТЕРФЕЙСА
+        fovCircle.Visible = true
+        
+        local target = getClosestPlayerToMouse()
+        if target and target.Character and target.Character:FindFirstChild("Head") then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
+        end
+    else
+        if fovCircle then fovCircle.Visible = false end
+    end
+    
+    if visualsEnabled then 
+        updateVisuals() 
+        updateTracers()
+    else
+        clearTracers()
+    end
+end)
+
+task.spawn(function()
+    setUIFade(1)
+    updateColor()
+    updateConfigList()
+    
+    for i = 0, 100, 2 do
+        ProgressBarTrack.Size = UDim2.new(i / 100, 0, 1, 0)
+        PercentLabel.Text = tostring(i) .. "%"
+        task.wait(0.02)
+    end
+     
+    local fadeTweens = {
+        TweenService:Create(LoadingFrame, TweenInfo.new(0.3), {BackgroundTransparency = 1}),
+        TweenService:Create(LoadingStroke, TweenInfo.new(0.3), {Transparency = 1}),
+        TweenService:Create(LoadingTitle, TweenInfo.new(0.3), {TextTransparency = 1}),
+        TweenService:Create(PercentLabel, TweenInfo.new(0.3), {TextTransparency = 1}),
+        TweenService:Create(ProgressBarBackground, TweenInfo.new(0.3), {BackgroundTransparency = 1}),
+        TweenService:Create(ProgressBarTrack, TweenInfo.new(0.3), {BackgroundTransparency = 1})
+    }
+    
+    for _, t in ipairs(fadeTweens) do t:Play() end
+    fadeTweens[#fadeTweens].Completed:Connect(function()
+        LoadingFrame.Visible = false
+        MainPanel.Visible = true
+        toggleMenuAnimation()
+    end)
+end)
